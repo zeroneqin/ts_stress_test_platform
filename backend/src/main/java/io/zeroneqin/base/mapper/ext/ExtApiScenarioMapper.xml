@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="io.zeroneqin.base.mapper.ext.ExtApiScenarioMapper">
+
+    <resultMap id="BaseResultMap" type="io.zeroneqin.api.dto.automation.ApiScenarioDTO"
+               extends="io.zeroneqin.base.mapper.ApiScenarioMapper.BaseResultMap">
+        <result column="project_name" property="projectName"/>
+        <result column="user_name" property="userName"/>
+    </resultMap>
+
+    <select id="list" resultMap="BaseResultMap">
+        select api_scenario.id, api_scenario.project_id, api_scenario.tags, api_scenario.user_id, api_scenario.num,
+        api_scenario.api_scenario_module_id,api_scenario.module_path, api_scenario.name, api_scenario.level,
+        api_scenario.status, api_scenario.principal, api_scenario.step_total, api_scenario.follow_people,
+        api_scenario.last_result,api_scenario.pass_rate,api_scenario.report_id,
+        api_scenario.schedule, api_scenario.description, api_scenario.create_time, api_scenario.update_time,
+        project.name as project_name, user.name as user_name
+        from api_scenario
+        left join project on api_scenario.project_id = project.id
+        left join user on api_scenario.user_id = user.id
+        <where>
+            <if test="request.name != null">
+                and api_scenario.name like CONCAT('%', #{request.name},'%')
+            </if>
+            <if test="request.workspaceId != null">
+                AND project.workspace_id = #{request.workspaceId}
+            </if>
+            <if test="request.projectId != null">
+                AND project.id = #{request.projectId}
+            </if>
+            <if test="request.id != null">
+                AND api_scenario.id = #{request.id}
+            </if>
+            <if test="request.userId != null">
+                AND api_scenario.user_id = #{request.userId}
+            </if>
+            <if test="request.moduleId != null">
+                AND api_scenario.api_scenario_module_id = #{request.moduleId}
+            </if>
+            <if test="request.projectId != null">
+                AND api_scenario.project_id = #{request.projectId}
+            </if>
+            <if test="request.ids != null and request.ids.size() > 0">
+                AND api_scenario.id in
+                <foreach collection="request.ids" item="itemId" separator="," open="(" close=")">
+                    #{itemId}
+                </foreach>
+            </if>
+            <if test="request.moduleIds != null and request.moduleIds.size() > 0">
+                AND api_scenario.api_scenario_module_id in
+                <foreach collection="request.moduleIds" item="nodeId" separator="," open="(" close=")">
+                    #{nodeId}
+                </foreach>
+            </if>
+            <if test="request.filters != null and request.filters.size() > 0">
+                and api_scenario.status in
+                <foreach collection="request.filters" item="value" separator="," open="(" close=")">
+                    #{value}
+                </foreach>
+            </if>
+        </where>
+        <if test="request.orders != null and request.orders.size() > 0">
+            order by
+            <foreach collection="request.orders" separator="," item="order">
+                api_scenario.${order.name} ${order.type}
+            </foreach>
+        </if>
+    </select>
+
+    <select id="selectByTagId" resultType="io.zeroneqin.base.domain.ApiScenarioWithBLOBs">
+      select * from api_scenario where tags like CONCAT('%', #{id},'%')
+    </select>
+
+    <select id="selectIds" resultType="io.zeroneqin.base.domain.ApiScenarioWithBLOBs">
+        select * from api_scenario where id in
+        <foreach collection="ids" item="v" separator="," open="(" close=")">
+            #{v}
+        </foreach>
+    </select>
+
+    <select id="selectReference" resultType="io.zeroneqin.base.domain.ApiScenario">
+        select * from api_scenario
+        <where>
+            <if test="request.workspaceId != null">
+                AND project.workspace_id = #{request.workspaceId}
+            </if>
+            <if test="request.projectId != null">
+                AND project_id = #{request.projectId}
+            </if>
+            <if test="request.moduleId != null">
+                AND api_scenario_module_id = #{request.moduleId}
+            </if>
+            and scenario_definition like CONCAT('%', #{request.id},'%') and id != #{request.id}
+        </where>
+    </select>
+
+    <update id="removeToGc">
+        update api_scenario
+        set
+        status = 'Trash'
+        where id in
+        <foreach collection="ids" item="v" separator="," open="(" close=")">
+            #{v}
+        </foreach>
+    </update>
+
+    <update id="reduction">
+        update api_scenario
+        set
+        status = 'Underway'
+        where id in
+        <foreach collection="ids" item="v" separator="," open="(" close=")">
+            #{v}
+        </foreach>
+    </update>
+
+    <select id="countByProjectID" resultType="java.lang.Long">
+        SELECT COUNT(id) AS countNumber FROM api_scenario WHERE project_id = #{0} AND status != 'Trash'
+    </select>
+    <select id="countByProjectIDAndCreatInThisWeek" resultType="java.lang.Long">
+        SELECT count(id) AS countNumber FROM api_scenario
+        WHERE project_id = #{projectId}  AND status != 'Trash'
+        AND create_time BETWEEN #{firstDayTimestamp} AND #{lastDayTimestamp}
+    </select>
+
+    <select id="countRunResultByProjectID" resultType="io.zeroneqin.api.dto.datacount.ApiDataCountResult">
+        SELECT count(id) AS countNumber, if(last_result is null,"notRun",last_result) AS groupField  FROM api_scenario
+        WHERE project_id = #{0}
+        GROUP BY groupField
+    </select>
+
+    <select id="selectIdsNotExistsInPlan" resultType="java.lang.String">
+        select c.id
+        from api_scenario c
+        where c.project_id = #{projectId} and c.id not in (
+          select pc.api_scenario_id
+          from test_plan_api_scenario pc
+          where pc.test_plan_id = #{planId}
+        )
+    </select>
+    <select id="getNextNum" resultType="io.zeroneqin.base.domain.ApiScenario">
+        SELECT * FROM api_scenario WHERE api_scenario.project_id = #{projectId} ORDER BY num DESC LIMIT 1;
+    </select>
+
+</mapper>

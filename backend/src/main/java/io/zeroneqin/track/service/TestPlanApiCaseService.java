@@ -1,0 +1,110 @@
+package io.zeroneqin.track.service;
+
+import io.zeroneqin.api.dto.definition.ApiTestCaseDTO;
+import io.zeroneqin.api.dto.definition.ApiTestCaseRequest;
+import io.zeroneqin.api.dto.definition.TestPlanApiCaseDTO;
+import io.zeroneqin.api.service.ApiDefinitionExecResultService;
+import io.zeroneqin.api.service.ApiTestCaseService;
+import io.zeroneqin.base.domain.TestPlanApiCase;
+import io.zeroneqin.base.domain.TestPlanApiCaseExample;
+import io.zeroneqin.base.mapper.TestPlanApiCaseMapper;
+import io.zeroneqin.base.mapper.ext.ExtTestPlanApiCaseMapper;
+import io.zeroneqin.commons.utils.ServiceUtils;
+import io.zeroneqin.track.request.testcase.TestPlanApiCaseBatchRequest;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
+
+import javax.annotation.Resource;
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+@Transactional(rollbackFor = Exception.class)
+public class TestPlanApiCaseService {
+
+    @Resource
+    TestPlanApiCaseMapper testPlanApiCaseMapper;
+    @Resource
+    ApiTestCaseService apiTestCaseService;
+    @Resource
+    ExtTestPlanApiCaseMapper extTestPlanApiCaseMapper;
+    @Lazy
+    @Resource
+    ApiDefinitionExecResultService apiDefinitionExecResultService;
+
+    public List<TestPlanApiCaseDTO> list(ApiTestCaseRequest request) {
+        request.setProjectId(null);
+        request.setOrders(ServiceUtils.getDefaultOrder(request.getOrders()));
+        List<TestPlanApiCaseDTO> apiTestCases = extTestPlanApiCaseMapper.list(request);
+        if (CollectionUtils.isEmpty(apiTestCases)) {
+            return apiTestCases;
+        }
+        apiTestCaseService.buildUserInfo(apiTestCases);
+        return apiTestCases;
+    }
+
+    public List<String> getExecResultByPlanId(String plan) {
+        return extTestPlanApiCaseMapper.getExecResultByPlanId(plan);
+    }
+
+    public List<ApiTestCaseDTO> relevanceList(ApiTestCaseRequest request) {
+        List<String> ids = apiTestCaseService.selectIdsNotExistsInPlan(request.getProjectId(), request.getPlanId());
+        if (CollectionUtils.isEmpty(ids)) {
+            return new ArrayList<>();
+        }
+        request.setIds(ids);
+        return apiTestCaseService.listSimple(request);
+    }
+
+    public int delete(String id) {
+        apiDefinitionExecResultService.deleteByResourceId(id);
+        TestPlanApiCaseExample example = new TestPlanApiCaseExample();
+        example.createCriteria()
+                .andIdEqualTo(id);
+
+        return testPlanApiCaseMapper.deleteByExample(example);
+    }
+
+    public int deleteByPlanId(String planId) {
+        List<String> ids = extTestPlanApiCaseMapper.getIdsByPlanId(planId);
+        apiDefinitionExecResultService.deleteByResourceIds(ids);
+        TestPlanApiCaseExample example = new TestPlanApiCaseExample();
+        example.createCriteria()
+                .andTestPlanIdEqualTo(planId);
+        return testPlanApiCaseMapper.deleteByExample(example);
+    }
+
+    public void deleteApiCaseBath(TestPlanApiCaseBatchRequest request) {
+        if (CollectionUtils.isEmpty(request.getIds())) {
+            return;
+        }
+        apiDefinitionExecResultService.deleteByResourceIds(request.getIds());
+        TestPlanApiCaseExample example = new TestPlanApiCaseExample();
+        example.createCriteria()
+                .andIdIn(request.getIds())
+                .andTestPlanIdEqualTo(request.getPlanId());
+        testPlanApiCaseMapper.deleteByExample(example);
+    }
+
+    public List<TestPlanApiCase> getCasesByPlanId(String planId) {
+        TestPlanApiCaseExample example = new TestPlanApiCaseExample();
+        example.createCriteria().andTestPlanIdEqualTo(planId);
+        return testPlanApiCaseMapper.selectByExample(example);
+    }
+
+    public void setExecResult(String id, String status) {
+        TestPlanApiCase apiCase = new TestPlanApiCase();
+        apiCase.setId(id);
+        apiCase.setStatus(status);
+        testPlanApiCaseMapper.updateByPrimaryKeySelective(apiCase);
+    }
+
+    public void deleteByRelevanceProjectIds(String planId, List<String> relevanceProjectIds) {
+        TestPlanApiCaseBatchRequest request = new TestPlanApiCaseBatchRequest();
+        request.setPlanId(planId);
+        request.setIds(extTestPlanApiCaseMapper.getNotRelevanceCaseIds(planId, relevanceProjectIds));
+        deleteApiCaseBath(request);
+    }
+}

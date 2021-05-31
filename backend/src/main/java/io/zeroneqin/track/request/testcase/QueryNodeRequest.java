@@ -1,0 +1,14 @@
+package io.zeroneqin.track.request.testcase;
+
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
+@Setter
+public class QueryNodeRequest {
+
+    private String testPlanId;
+    private String projectId;
+    private String reviewId;
+
+}
